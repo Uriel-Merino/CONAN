@@ -4,8 +4,10 @@ import george, celerite, spleaf
 import spleaf.term as term
 from types import SimpleNamespace as SN
 
-gp_h3h4names = SN(  h3 = {"sho":"Q", "exps2":"η", "rquad":"α",  "qp":"η",  "qp_mp":"η", "qp_sc":"b", "qp_ce":"C"},
-                    h4 = {"qp":"P",  "qp_sc":"P",  "qp_ce":"P",  "qp_mp":"P"})
+gp_h3h4names = SN(  h3 = {"sho":"Q", "exps2":"η", "rquad":"α",  "qp":"η",  "qp_mp":"η", "qp_sc":"b", "qp_ce":"C", "qpc":"w"},
+                    h4 = {"qp":"P",  "qp_sc":"P",  "qp_ce":"P",  "qp_mp":"P", "qpc":"P"})
+
+gp_h5names = SN(h5={"qpc":"amplitude2"})
 
 #to introduce new GP kernel into CONAN, simply add the kernel to the dictionary of possible kernels below.
 # with a shortcut name for calling the kernel in the code.
@@ -104,7 +106,10 @@ george_kernels = dict(  mat32 = george.kernels.Matern32Kernel,
                         expsq = george.kernels.ExpSquaredKernel,
                         exps2 = george.kernels.ExpSine2Kernel,
                         qp    = (george.kernels.ExpSquaredKernel,george.kernels.ExpSine2Kernel),  # eq 55 (https://arxiv.org/pdf/1703.09710)
-                        rquad = george.kernels.RationalQuadraticKernel)
+                        rquad = george.kernels.RationalQuadraticKernel,
+                        cte   = george.kernels.ConstantKernel,
+                        cte2   = george.kernels.ConstantKernel,
+                        qpc   = (george.kernels.ExpSquaredKernel,george.kernels.ExpSine2Kernel,george.kernels.CosineKernel,george.kernels.ConstantKernel,george.kernels.ConstantKernel) ) # eq 19 (https://arxiv.org/pdf/2012.01862)
 
 celerite_kernels = dict(mat32 = celerite.terms.Matern32Term,
                         exp   = celerite.terms.RealTerm,
@@ -124,7 +129,7 @@ spleaf_kernels = dict(  mat32  = term.Matern32Kernel,
                         qp_mp  = term.MEPKernel)
 
 npars_gp = dict(mat32 = 2, mat52 = 2, exp = 2, cos = 2, expsq = 2, exps2 = 3, sho = 3,
-                rquad = 3, qp    = 4, qp_sc = 4, qp_mp = 4, qp_ce = 4 )
+                rquad = 3, qp    = 4, qp_sc = 4, qp_mp = 4, qp_ce = 4, qpc = 5, cte = 1 )
 
 
 class gp_params_convert:
@@ -166,7 +171,7 @@ class gp_params_convert:
             assert kern in self._allowed_kernels[kern[:3]], f'gp_params_convert(): `{kern[:2]}` kernel to convert must be one of {self._allowed_kernels[kern[:3]]} but "{kern}" given'
 
             # call class function with the name kern
-            p = self.__getattribute__(kern)(data,*pars[i*4:i*4+4])
+            p = self.__getattribute__(kern)(data,*pars[i*5:i*5+5])
             conv_pars.append(p)
             
         return np.concatenate(conv_pars)
@@ -186,7 +191,7 @@ class gp_params_convert:
     
     #======spleaf kernels=======
     # the kernels here are a direct function of the distance between points
-    def sp_expsq(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def sp_expsq(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         exponential sine kernel. spleaf ESKernel
         """
@@ -197,7 +202,7 @@ class gp_params_convert:
         rho        = lengthscale
         return sig, rho
     
-    def sp_exp(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def sp_exp(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         spleaf ExponentialKernel
         """
@@ -208,7 +213,7 @@ class gp_params_convert:
         la         = 1/lengthscale
         return a, la
     
-    def sp_sho(self, data, amplitude, lengthscale, h3, h4=None):
+    def sp_sho(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
         """
         simple harmonic oscillator kernel. spleaf SHOKernel
         """
@@ -219,7 +224,7 @@ class gp_params_convert:
         Q          = h3
         return sig, P0, Q
     
-    def sp_mat32(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def sp_mat32(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         Matern32 kernel
         """
@@ -230,7 +235,7 @@ class gp_params_convert:
         rho        = lengthscale
         return sig, rho
     
-    def sp_mat52(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def sp_mat52(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         Matern52 kernel
         """
@@ -241,7 +246,7 @@ class gp_params_convert:
         rho        = lengthscale
         return sig, rho
     
-    def sp_cos(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def sp_cos(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         Cosine kernel built from spleaf QuasiperiodicKernel, with b and la set to 0
         """
@@ -252,7 +257,7 @@ class gp_params_convert:
         nu         = 2*np.pi/lengthscale
         return variance, nu  
         
-    def sp_exps2(self, data, amplitude, lengthscale, h3, h4=None):
+    def sp_exps2(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
         """
         expsine2 kernel. derived from spleaf ESPKernel
         """
@@ -264,7 +269,7 @@ class gp_params_convert:
         eta        = h3
         return sig, P, eta
     
-    def sp_qp(self, data, amplitude, lengthscale, h3, h4):
+    def sp_qp(self, data, amplitude, lengthscale, h3, h4, h5=None):
         """
         Exponential-sine periodic (ESP) kernel
         """
@@ -277,7 +282,7 @@ class gp_params_convert:
         P          = h4
         return sig, rho, eta, P
     
-    def sp_qp_mp(self, data, amplitude, lengthscale, h3, h4):
+    def sp_qp_mp(self, data, amplitude, lengthscale, h3, h4, h5=None):
         """
         MEP kernel
         """
@@ -290,7 +295,7 @@ class gp_params_convert:
         P          = h4
         return sig, rho, eta, P
     
-    def sp_qp_sc(self, data, amplitude, lengthscale, h3, h4):  
+    def sp_qp_sc(self, data, amplitude, lengthscale, h3, h4, h5=None):  
         """
         Quasiperiodic kernel with sine and cosine components
         """
@@ -310,7 +315,7 @@ class gp_params_convert:
     #=======celerite kernels =======
     # the kernels here are directly a function of the distance between points, 
     # so we do not square the lengthscale
-    def ce_sho(self, data, amplitude, lengthscale, h3, h4=None):
+    def ce_sho(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
         """
         amplitude: the standard deviation of the process
         lengthscale: the undamped period of the oscillator
@@ -329,7 +334,7 @@ class gp_params_convert:
         log_S0, log_w0, log_Q = np.log(S0), np.log(w0), np.log(Q)
         return log_S0, log_Q, log_w0
 
-    def ce_cos(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def ce_cos(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         CosineKernel implementation in celerite
         """
@@ -340,7 +345,7 @@ class gp_params_convert:
         log_nu    = np.log(2*np.pi/lengthscale)
         return log_var, log_nu
 
-    def ce_exp(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def ce_exp(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         celerite real term: same as an exponential kernel like in George
         """
@@ -352,7 +357,7 @@ class gp_params_convert:
         log_a = np.log(amplitude**2)     #log_variance
         return log_a, log_c
     
-    def ce_mat32(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def ce_mat32(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         celerite mat32
         """
@@ -364,7 +369,7 @@ class gp_params_convert:
         log_rho    = np.log(rho)
         return log_sigma, log_rho
     
-    def ce_qp_ce(self, data, amplitude, lengthscale, h3, h4):
+    def ce_qp_ce(self, data, amplitude, lengthscale, h3, h4, h5=None):
         """
         celerite approximation of quasiperiodic kernel
         """
@@ -385,7 +390,7 @@ class gp_params_convert:
     # in this case, the metric=lengthscale^2, since it scales r^2 
     # Non-stationary kernels depend on the distance between points themselves, r
     # and the amplitude is the standard deviation of the process. but george takes in the variance, so we need to square it
-    def ge_mat32(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def ge_mat32(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         George mat32, stationary kernel
         """
@@ -398,7 +403,7 @@ class gp_params_convert:
         log_metric = np.log(metric)
         return log_var, log_metric
     
-    def ge_cos(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def ge_cos(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         George CosineKernel, non-stationary kernel
         """
@@ -409,7 +414,7 @@ class gp_params_convert:
         log_period = np.log(lengthscale)
         return log_var, log_period
 
-    def ge_mat52(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def ge_mat52(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         George mat52, stationary kernel
         """
@@ -421,7 +426,7 @@ class gp_params_convert:
         log_metric = np.log(metric)
         return log_var, log_metric
     
-    def ge_expsq(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def ge_expsq(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         George expsq, stationary kernel
         """
@@ -433,7 +438,7 @@ class gp_params_convert:
         log_metric = np.log(metric)
         return log_var, log_metric
     
-    def ge_exp(self, data, amplitude, lengthscale, h3=None, h4=None):
+    def ge_exp(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         George exp, stationary kernel
         """
@@ -445,7 +450,7 @@ class gp_params_convert:
         log_metric = np.log(metric)
         return log_var, log_metric
     
-    def ge_exps2(self, data, amplitude, lengthscale, h3, h4=None):
+    def ge_exps2(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
         """
         George expsine2 kernel, non-stationary kernel
         """
@@ -459,7 +464,7 @@ class gp_params_convert:
         log_period = np.log(period)
         return log_var, gamma, log_period
 
-    def ge_qp(self, data, amplitude, lengthscale, h3, h4):
+    def ge_qp(self, data, amplitude, lengthscale, h3, h4, h5=None):
         """
         George quasiperiodic. ge_qp = ge_expsq *  ge_exps2
         """
@@ -469,8 +474,50 @@ class gp_params_convert:
 
         return log_var, log_metric, log_var2, gamma, log_period
 
+    def ge_cte(self, data, amplitude, lengthscale=None, h3=None, h4=None, h5=None):
+        """
+        George cte.
+        """
+        if amplitude==-1: amplitude = 1
+        else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
+        log_var    = np.log(amplitude**2)
 
-    def ge_rquad(self, data, amplitude, lengthscale, h3, h4=None):
+        return log_var
+
+    def ge_cte2(self, data, amplitude, lengthscale=None, h3=None, h4=None, h5=None):
+        """
+        George cte2.
+        """
+        if amplitude==-1: amplitude = 1
+        else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
+        log_var    = np.log(amplitude**2)
+
+        return log_var
+
+    def ge_qpc(self, data, amplitude,lengthscale, h3, h4, h5):
+        """
+        George quasiperiodic and cosine. ge_qpc = ge_expsq *  (h1**2*ge_exps2 + h2**2*ge_cos)
+
+        HYPERPARAMETERS: 
+        
+        - lambda=lengthscale, lengthscale_qp=lengthscale_qpc/2
+        - P=Prot (on the cos kernel P/2, two modulations)
+        - h1, h2 = amplitude, amplitude2
+        - w = eta_qp
+        """
+        w, P = h3, h4 
+        amplitude2 = h5
+        logvarh1                    = self.ge_cte(data,amplitude**2)
+        logvarh2                    = self.ge_cte2(data,amplitude2**2)
+        log_var, log_metric         = self.ge_expsq(data, -1, lengthscale)
+        log_var2, gamma, log_period = self.ge_exps2(data, -1, P, w)
+        log_varcos, log_periodcos = self.ge_cos(data,-1,P/2)
+
+        return logvarh1,logvarh2,log_var, log_metric, log_var2, gamma, log_period, log_varcos, log_periodcos
+
+
+
+    def ge_rquad(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
         """
         George rationalquadratic, stationary kernel
         """
