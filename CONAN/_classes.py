@@ -1422,14 +1422,14 @@ class load_lightcurves:
                 _res.params.add(f"ecc{lbl}",expr=f'sesinw{lbl}**2+secosw{lbl}**2',min=0, max=1)
                 _res.params.add(f"w{lbl}",expr=f'(180/pi*atan2(sesinw{lbl},secosw{lbl}))%360', min=0, max=360)
             if "Duration" in _res.params:     #one duration for single planet system
-                ecc_fac  = '((1-ecc**2)/(1+sesinw*sqrt(ecc)))' if _res.params["sesinw"].value!=0 else '1'
-                ecc_fac2 = f'((1+sqrt(ecc)*sesinw)**3/(1-ecc**2)**(3/2))'
+                ecc_fac  = f'((1-ecc{lbl}**2)/(1+sesinw{lbl}*sqrt(ecc{lbl})))' if _res.params[f"sesinw{lbl}"].value!=0 else '1'
+                ecc_fac2 = f'((1+sqrt(ecc{lbl})*sesinw{lbl})**3/(1-ecc{lbl}**2)**(3/2))'
 
-                numer   = '((1+abs(RpRs))**2 - Impact_para**2)'
-                denom   = f'(sin( Duration*pi*sqrt(1-ecc**2)/(Period*{ecc_fac}**2) )**2 * {ecc_fac}**2)'
-                _res.params.add("aR",expr=f'sqrt({numer}/{denom}+(Impact_para/{ecc_fac})**2)', min=0, max=np.inf)
-                _res.params.add("rho_star",expr=f'((3*pi*aR**3)/({G}*(Period*24*3600)**2))/{ecc_fac2}', min=0, max=np.inf)
-                _res.params.add(f"inc", expr=f'(180/pi*acos(Impact_para/(aR*{ecc_fac})))')
+                numer    = f'sqrt( ((1+abs(RpRs{lbl}))**2 - Impact_para{lbl}**2) )'
+                denom   = f'(sin( Duration*pi*sqrt(1-ecc{lbl}**2)/(Period{lbl}*{ecc_fac}**2) )**2 * {ecc_fac}**2)'
+                _res.params.add(f"aR{lbl}",expr=f'sqrt({numer}/{denom}+(Impact_para{lbl}/{ecc_fac})**2)', min=0, max=np.inf)
+                _res.params.add(f"rho_star{lbl}",expr=f'((3*pi*aR{lbl}**3)/({G}*(Period{lbl}*24*3600)**2))/{ecc_fac2}', min=0, max=np.inf)
+                _res.params.add(f"inc{lbl}", expr=f'(180/pi*acos(Impact_para{lbl}/(aR{lbl}*{ecc_fac})))')
 
             elif "rho_star" in _res.params:
                 for n in range(1,self._nplanet+1):
@@ -1439,7 +1439,7 @@ class load_lightcurves:
                     numer    = f'sqrt( ((1+abs(RpRs{lbl}))**2 - Impact_para{lbl}**2) )'
                     _res.params.add(f"aR{lbl}", expr = f'((rho_star*{ecc_fac2}*{G}*(Period{lbl}*24*3600)**2) /(3*pi))**(1/3)', min=0, max=np.inf)
                     _res.params.add(f"inc{lbl}", expr=f'(180/pi*acos(Impact_para{lbl}/(aR{lbl}*{ecc_fac})))')
-                    _res.params.add(f"Duration{lbl}", expr=f'( Period{lbl}/pi * ({ecc_fac}**2/(sqrt(1-ecc**2))) * asin({numer}/(aR{lbl}*{ecc_fac}*sin(pi/180*inc{lbl}))))', min=0, max=np.inf)
+                    _res.params.add(f"Duration{lbl}", expr=f'( Period{lbl}/pi * ({ecc_fac}**2/sqrt(1-ecc{lbl}**2)) * asin({numer}/(aR{lbl}*{ecc_fac}*sin(pi/180*inc{lbl}))))', min=0, max=np.inf)
             
             #GP
             for gpn in [1,2]:
