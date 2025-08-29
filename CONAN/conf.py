@@ -444,7 +444,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
 
     # ========== GP input ====================
     gp_lclist,op = [],[]
-    gp_pars, kernels, amplitude, lengthscale, h3, h4, lcGP_logUprior = [],[],[],[],[],[],[]
+    gp_pars, kernels, amplitude, lengthscale, h3, h4,h5, lcGP_logUprior = [],[],[],[],[],[],[],[]
 
     dump =_file.readline()
     if version < (3,3,11):
@@ -458,6 +458,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
             lengthscale.append(_prior_value(_adump[4])); lcGPpdist.append(_adump[4].split("(")[0])
             h3.append(None)
             h4.append(None)
+            h5.append(None)
 
             op.append(_adump[5].strip("|"))
             if op[-1] != "--":    #if theres a second kernel 
@@ -467,6 +468,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
                 lengthscale[-1] = (lengthscale[-1],_prior_value(_adump[10])); lcGPpdist.append(_adump[10].split("(")[0])
                 h3.append(None)
                 h4.append(None)
+                h5.append(None)
 
             lcGPpdist = [x for x in lcGPpdist if x in ["U", "LU"]]  #remove all other prior types
             if lcGPpdist!=[]: 
@@ -486,7 +488,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
             lengthscale.append(_prior_value(_adump[4])); lcGPpdist.append(_adump[4].split("(")[0])
             h3.append(_prior_value(_adump[5])); lcGPpdist.append(_adump[5].split("(")[0])
             h4.append(_prior_value(_adump[6])); lcGPpdist.append(_adump[6].split("(")[0])
-
+            h5.append(_prior_value(_adump[7])); lcGPpdist.append(_adump[7].split("(")[0])
             #move to next line
             dump   = _file.readline()
             _adump = dump.split()
@@ -498,6 +500,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
                 lengthscale[-1] = (lengthscale[-1],_prior_value(_adump[4])); lcGPpdist.append(_adump[4].split("(")[0])
                 h3[-1]          = (h3[-1],_prior_value(_adump[5])); lcGPpdist.append(_adump[5].split("(")[0])
                 h4[-1]          = (h4[-1],_prior_value(_adump[6])); lcGPpdist.append(_adump[6].split("(")[0])
+                h5[-1]          = (h5[-1],_prior_value(_adump[7])); lcGPpdist.append(_adump[7].split("(")[0])
                 #move to next rv file    
                 dump =_file.readline()
             else:
@@ -518,7 +521,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
     if _clip_cols!=[]: _clip_cols = [f"col{c}" for c in _clip_cols[0]]  #convert to list of col{c} format
 
     # instantiate light curve object
-    lc_obj = load_lightcurves(_names, data_filepath=fpath, filters=_filters, wl=_wl, nplanet=nplanet)
+    lc_obj = load_lightcurves(_names, fpath, _filters, _wl, nplanet)
     lc_obj.lc_baseline(_offset.copy(), *np.array(_bases).T, sin=_bsin, grp_id=None, gp=_useGPphot,verbose=False )
     lc_obj.add_sinusoid(lc_list=sin_lclist, trig=trig, n=sin_n, par=sin_par, Amp = sin_Amp, P=sin_Per, x0=sin_x0, verbose=False)
     lc_obj.clip_outliers(lc_list=_clip_lclist , clip=_clip, width=_clip_width,select_column=_clip_cols,niter=_clip_niter, show_plot=False,verbose=False )
@@ -531,7 +534,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
         gp_lclist = gp_lclist[0] if gp_lclist[0] in ['same','all'] else gp_lclist
     gp_pck = [_useGPphot[lc_obj._names.index(lc)] for lc in lc_obj._gp_lcs()]if _useGPphot!=[] else []
     lc_obj.add_GP(lc_list=gp_lclist,par=gp_pars,kernel=kernels,operation=op,
-                    amplitude=amplitude,lengthscale=lengthscale,h3=h3,h4=h4,gp_pck=gp_pck,
+                    amplitude=amplitude,lengthscale=lengthscale,h3=h3,h4=h4,h5=h5,gp_pck=gp_pck,
                     GP_logUprior=lcGP_logUprior, verbose=verbose)
     lc_obj._fit_offset = _offset
 
@@ -593,7 +596,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
     
     # RV GP
     gp_rvlist,op = [],[]
-    gp_pars, kernels, amplitude, lengthscale, h3, h4, rvGP_logUprior = [],[],[],[],[],[],[]
+    gp_pars, kernels, amplitude, lengthscale, h3, h4,h5, rvGP_logUprior = [],[],[],[],[],[],[],[]
 
     dump =_file.readline()
     if version < (3,3,11):
@@ -608,6 +611,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
             lengthscale.append(_prior_value(_adump[4])); rvGPpdist.append(_adump[4].split("(")[0])
             h3.append(None)
             h4.append(None)
+            h5.append(None)
             
             op.append(_adump[5].strip("|"))
             if op[-1] != "--":    #if theres a second kernel 
@@ -617,6 +621,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
                 lengthscale[-1] = (lengthscale[-1],_prior_value(_adump[10])); rvGPpdist.append(_adump[10].split("(")[0])
                 h3.append(None)
                 h4.append(None)
+                h5.append(None)
             
             rvGPpdist = [x for x in rvGPpdist if x in ["U", "LU"]]  #remove all other prior types
             if rvGPpdist!=[]:
@@ -637,6 +642,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
             lengthscale.append(_prior_value(_adump[4])); rvGPpdist.append(_adump[4].split("(")[0])
             h3.append(_prior_value(_adump[5])); rvGPpdist.append(_adump[5].split("(")[0])
             h4.append(_prior_value(_adump[6])); rvGPpdist.append(_adump[6].split("(")[0])
+            h5.append(_prior_value(_adump[7])); rvGPpdist.append(_adump[7].split("(")[0])
             
             #move to next line
             dump   = _file.readline()
@@ -649,6 +655,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
                 lengthscale[-1] = (lengthscale[-1],_prior_value(_adump[4])); rvGPpdist.append(_adump[4].split("(")[0])
                 h3[-1]          = (h3[-1],_prior_value(_adump[5])); rvGPpdist.append(_adump[5].split("(")[0])
                 h4[-1]          = (h4[-1],_prior_value(_adump[6])); rvGPpdist.append(_adump[6].split("(")[0])
+                h5[-1]          = (h5[-1],_prior_value(_adump[7])); rvGPpdist.append(_adump[7].split("(")[0])
                 #move to next rv file    
                 dump =_file.readline()
             else:
@@ -674,7 +681,7 @@ def load_configfile(configfile="input_config.dat", return_fit=False, init_decorr
         gp_rvlist = gp_rvlist[0] if gp_rvlist[0] in ['same','all'] else gp_rvlist
     gp_pck = [usegpRV[rv_obj._names.index(rv)] for rv in rv_obj._gp_rvs()] if usegpRV!=[] else []
     rv_obj.add_rvGP(rv_list=gp_rvlist,par=gp_pars,kernel=kernels,operation=op,
-                    amplitude=amplitude,lengthscale=lengthscale,h3=h3,h4=h4,gp_pck=gp_pck,
+                    amplitude=amplitude,lengthscale=lengthscale,h3=h3,h4=h4,h5=h5,gp_pck=gp_pck,
                     GP_logUprior=rvGP_logUprior, verbose=verbose)
     _skip_lines(_file,2)                                      #remove 2 comment lines
     
