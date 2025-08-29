@@ -9,6 +9,7 @@ gp_h3h4names = SN(  h3 = {"sho":"Q", "exps2":"η", "rquad":"α",  "qp":"η",  "q
 
 gp_h5names = SN(h5={"qpc":"amplitude2"})
 
+
 #to introduce new GP kernel into CONAN, simply add the kernel to the dictionary of possible kernels below.
 # with a shortcut name for calling the kernel in the code.
 # the kernel should be callable directly from the package, or if not, define a class/function for the kernel
@@ -434,7 +435,7 @@ class gp_params_convert:
         else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
         
         log_var    = np.log(amplitude**2)
-        metric     = lengthscale**2
+        metric     = (lengthscale)**2
         log_metric = np.log(metric)
         return log_var, log_metric
     
@@ -507,13 +508,13 @@ class gp_params_convert:
         """
         w, P = h3, h4 
         amplitude2 = h5
-        logvarh1                    = self.ge_cte(data,amplitude**2)
-        logvarh2                    = self.ge_cte2(data,amplitude2**2)
+        logvarh1                    = self.ge_cte(data,amplitude)
+        logvarh2                    = self.ge_cte2(data,amplitude2)
         log_var, log_metric         = self.ge_expsq(data, -1, lengthscale)
         log_var2, gamma, log_period = self.ge_exps2(data, -1, P, w)
         log_varcos, log_periodcos = self.ge_cos(data,-1,P/2)
 
-        return logvarh1,logvarh2,log_var, log_metric, log_var2, gamma, log_period, log_varcos, log_periodcos
+        return log_metric, logvarh1,gamma,log_period,logvarh2, log_periodcos
 
 
 
@@ -529,8 +530,6 @@ class gp_params_convert:
         metric     = lengthscale**2
         log_metric = np.log(metric)
         return log_var, log_alpha, log_metric
-    
+
     def __repr__(self):
         return 'object to convert gp amplitude and lengthscale to required value for different kernels'
-        
-
