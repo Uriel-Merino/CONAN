@@ -1110,7 +1110,7 @@ def run_fit(lc_obj=None, rv_obj=None, fit_obj=None, statistic = "median", out_fo
                         if gpkern=="qp":    #expsq * expsine2 kernel
                             kern = (100e-6*george_kernels[gpkern][0](1,ndim=ndim_gp, axes=axes_gp)) * (-1*george_kernels[gpkern][1](1,1,ndim=ndim_gp, axes=axes_gp))
                         elif gpkern=="qpc": #ge_qpc = ge_expsq *  (ge_cte*ge_exps2 + ge_cte*ge_cos)
-                            kern = 100e-6*(george_kernels[gpkern][0](1,ndim=ndim_gp, axes=axes_gp)) * ((george_kernels[gpkern][3](1,ndim=ndim_gp, axes=axes_gp)*(1*george_kernels[gpkern][1](1,1,ndim=ndim_gp, axes=axes_gp)))+((george_kernels[gpkern][4](1,ndim=ndim_gp, axes=axes_gp)*(1*george_kernels[gpkern][2](0.5,ndim=ndim_gp, axes=axes_gp)))))
+                            kern = (george_kernels[gpkern][0](metric=1,ndim=ndim_gp, axes=axes_gp)) * ((george_kernels[gpkern][3](log_constant=1,ndim=ndim_gp, axes=axes_gp)*(george_kernels[gpkern][1](gamma=1,log_period=1,ndim=ndim_gp, axes=axes_gp)))+((george_kernels[gpkern][4](log_constant=1,ndim=ndim_gp, axes=axes_gp)*(george_kernels[gpkern][2](log_period=0.5,ndim=ndim_gp, axes=axes_gp)))))
                         else:
                             kern = 100e-6 * george_kernels[gpkern](*[1]*(npars_gp[gpkern]-1), ndim=ndim_gp,axes=axes_gp)  #dummy initialization
                         # set the kernel parameters to the starting values after performing the conversion
@@ -1125,7 +1125,7 @@ def run_fit(lc_obj=None, rv_obj=None, fit_obj=None, statistic = "median", out_fo
                         if gpkern=="qp":
                             kern2 = (100e-6*george_kernels[gpkern][0](1,ndim=ndim_gp, axes=axes_gp)) * (-1*george_kernels[gpkern][1](1,1,ndim=ndim_gp, axes=axes_gp))
                         elif gpkern=="qpc": #ge_qpc = ge_expsq *  (ge_exps2 + ge_cos)
-                            kern2 = 100e-6*(george_kernels[gpkern][0](1,ndim=ndim_gp, axes=axes_gp)) * ((george_kernels[gpkern][3](1,ndim=ndim_gp, axes=axes_gp)*(1*george_kernels[gpkern][1](1,1,ndim=ndim_gp, axes=axes_gp)))+((george_kernels[gpkern][4](1,ndim=ndim_gp, axes=axes_gp)*(1*george_kernels[gpkern][2](0.5,ndim=ndim_gp, axes=axes_gp)))))
+                            kern2 = (george_kernels[gpkern][0](metric=1,ndim=ndim_gp, axes=axes_gp)) * ((george_kernels[gpkern][3](log_constant=1,ndim=ndim_gp, axes=axes_gp)*(george_kernels[gpkern][1](gamma=1,log_period=1,ndim=ndim_gp, axes=axes_gp)))+((george_kernels[gpkern][4](log_constant=1,ndim=ndim_gp, axes=axes_gp)*(george_kernels[gpkern][2](log_period=0.5,ndim=ndim_gp, axes=axes_gp)))))
                         else:
                             kern2 = 100e-6 * george_kernels[gpkern](*[1]*(npars_gp[gpkern]-1), ndim=ndim_gp,axes=axes_gp)  #dummy initialization
                         gppars=  gp_conv.get_values(kernels="ge_"+gpkern, data="rv", pars=[thisRVgp[f"amplitude{n}"].start_value, thisRVgp[f"lengthscale{n}"].start_value,
