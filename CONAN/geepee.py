@@ -4,8 +4,8 @@ import george, celerite, spleaf
 import spleaf.term as term
 from types import SimpleNamespace as SN
 
-gp_h3h4names = SN(  h3 = {"sho":"Q", "exps2":"η", "rquad":"α",  "qp":"η",  "qp_mp":"η", "qp_sc":"b", "qp_ce":"C"},
-                    h4 = {"qp":"P",  "qp_sc":"P",  "qp_ce":"P",  "qp_mp":"P"})
+gp_h3h4names = SN(  h3 = {"sho":"Q", "exps2":"η", "rquad":"α",  "qp":"η",  "qp_mp":"η", "qp_sc":"b", "qp_ce":"C","qpc":"amp2"},
+                    h4 = {"qp":"P",  "qp_sc":"P",  "qp_ce":"P",  "qp_mp":"P","qpc":"P"})
 
 #to introduce new GP kernel into CONAN
 # - simply add the kernel to the dictionary of possible kernels below.
@@ -108,7 +108,10 @@ george_kernels = dict(  mat32 = george.kernels.Matern32Kernel,
                         expsq = george.kernels.ExpSquaredKernel,
                         exps2 = george.kernels.ExpSine2Kernel,
                         qp    = (george.kernels.ExpSquaredKernel,george.kernels.ExpSine2Kernel),  # eq 55 (https://arxiv.org/pdf/1703.09710)
-                        rquad = george.kernels.RationalQuadraticKernel)
+                        rquad = george.kernels.RationalQuadraticKernel,
+                        cte   = george.kernels.ConstantKernel,
+                        cte2   = george.kernels.ConstantKernel,
+                        qpc   = (george.kernels.ExpSquaredKernel,george.kernels.ExpSine2Kernel,george.kernels.CosineKernel,george.kernels.ConstantKernel,george.kernels.ConstantKernel) ) # eq 19 (https://arxiv.org/pdf/2012.01862))
 
 celerite_kernels = dict(mat32 = celerite.terms.Matern32Term,
                         exp   = celerite.terms.RealTerm,
@@ -128,7 +131,7 @@ spleaf_kernels = dict(  mat32  = term.Matern32Kernel,
                         qp_mp  = term.MEPKernel)
 
 npars_gp = dict(mat32 = 2, mat52 = 2, exp = 2, cos = 2, expsq = 2, exps2 = 3, sho = 3,
-                rquad = 3, qp    = 4, qp_sc = 4, qp_mp = 4, qp_ce = 4 )
+                rquad = 3, qp    = 4, qpc    = 4,qp_sc = 4, qp_mp = 4, qp_ce = 4 )
 
 
 class gp_params_convert:
@@ -542,6 +545,49 @@ class gp_params_convert:
         metric     = lengthscale**2
         log_metric = np.log(metric)
         return log_var, log_alpha, log_metric
+
+    def ge_cte(self, data, amplitude, lengthscale=None, h3=None, h4=None, h5=None):
+        """
+        George cte.
+        """
+        if amplitude==-1: amplitude = 1
+        else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
+        log_var    = np.log(amplitude**2)
+
+        return log_var
+
+    def ge_cte2(self, data, amplitude, lengthscale=None, h3=None, h4=None, h5=None):
+        """
+        George cte2.
+        """
+        if amplitude==-1: amplitude = 1
+        else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
+        log_var    = np.log(amplitude**2)
+
+        return log_var
+
+    def ge_qpc(self, data, amplitude,lengthscale, h3, h4, h5=None):
+        """
+        George quasiperiodic and cosine. ge_qpc = ge_expsq *  (h1**2*ge_exps2 + h2**2*ge_cos)
+
+        HYPERPARAMETERS: 
+        
+        - lambda=lengthscale, lengthscale_qp=lengthscale_qpc/2
+        - P=Prot (on the cos kernel P/2, two modulations)
+        - h1, h2 = amplitude, amplitude2
+        - w = eta_qp
+        """
+        amplitude2, P = h3, h4 
+        w=0.31
+        logvarh1                    = self.ge_cte(data,amplitude)
+        logvarh2                    = self.ge_cte2(data,amplitude2)
+        log_var, log_metric         = self.ge_expsq(data, -1, lengthscale)
+        log_var2, gamma, log_period = self.ge_exps2(data, -1, P, w)
+        log_varcos, log_periodcos = self.ge_cos(data,-1,P/2)
+
+        return log_metric, logvarh1,gamma,log_period,logvarh2, log_periodcos
+
+
     
     def __repr__(self):
         return 'object to convert gp amplitude and lengthscale to required value for different kernels'
@@ -635,9 +681,15 @@ class GPSaveObj:
         x = self.x if x is None else x
 
         if self.gp_pck in ['ge','ce']:
-            srt_x   = np.argsort(x) if x.ndim==1 else np.argsort(x[:,0]) 
-            unsrt_x = np.argsort(srt_x)  #indices to unsort the gp axis
-            return self.gp.predict(self.resid, t=x[srt_x], return_var=return_var, return_cov=False)[unsrt_x]
+            if self.ndim_gp ==1:
+                srt_x   = np.argsort(x)
+                unsrt_x = np.argsort(srt_x)
+                if return_var:
+                    pred, var = self.gp.predict(self.resid, t=x[srt_x], return_var=True)
+                    return pred[unsrt_x], var[unsrt_x]
+                else:
+                    pred = self.gp.predict(self.resid, t=x[srt_x], return_var=False)
+                    return pred[unsrt_x]
 
         elif self.gp_pck == 'sp':
             if self.ndim_gp == 1:
