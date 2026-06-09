@@ -473,8 +473,27 @@ def bin_data(t,f,err=None,statistic="mean",bins=20):
 
 def bin_data_with_gaps(t,f,e=None, binsize=0.0104, gap_threshold=2.):
     """
-    # split t into chunks with gaps larger than gap_threshold*bin_size
-    # then bin each chunk separately
+    split t into chunks with gaps larger than gap_threshold*bin_size
+    then bin each chunk separately
+
+    Parameters
+    ----------
+    t : array-like
+        Time stamps.
+    f : array-like
+        Fluxes.
+    e : array-like, optional
+        Errors on the fluxes.
+    binsize : float, optional
+        Size of the bins.
+    gap_threshold : float, optional
+        Threshold for identifying gaps.
+
+    Returns
+    -------
+    (t_binned, f_binned, e_binned) if e is not None else (t_binned, f_binned)
+    
+
     """
     if binsize==0 or binsize<=np.median(np.diff(t)):  # no binning, if binsize is zero or less than the median time difference
         return (t,f) if e is None else (t,f,e)
@@ -490,14 +509,19 @@ def bin_data_with_gaps(t,f,e=None, binsize=0.0104, gap_threshold=2.):
         t_binned, f_binned, e_binned = [],[],[]
         
         for tc,fc,ec in zip(t_chunks,f_chunks,e_chunks):
-            if np.ptp(tc) < binsize: nbin = 1 #continue
-            else: nbin = int(np.ptp(tc)/binsize)
-            if e is not None: t_bin, f_bin, e_bin = bin_data(tc,fc,ec,statistic="mean",bins=nbin)
-            else: t_bin, f_bin = bin_data(tc,fc,statistic="mean",bins=nbin)
+            if np.ptp(tc) < binsize: 
+                nbin = 1 #continue
+            else: 
+                nbin = int(np.ptp(tc)/binsize)
+            if e is not None: 
+                t_bin, f_bin, e_bin = bin_data(tc,fc,ec,statistic="mean",bins=nbin)
+            else: 
+                t_bin, f_bin = bin_data(tc,fc,statistic="mean",bins=nbin)
 
             t_binned = np.concatenate((t_binned, t_bin))
             f_binned = np.concatenate((f_binned, f_bin))
-            if e is not None: e_binned = np.concatenate((e_binned, e_bin))
+            if e is not None: 
+                e_binned = np.concatenate((e_binned, e_bin))
 
         return (t_binned, f_binned, e_binned) if e is not None else (t_binned, f_binned)
 
@@ -692,18 +716,18 @@ def ecc_om_par(ecc, omega, conv_2_obj=False, return_tuple=False):
 
     to_fit = "y" if ecc.to_fit=="y" or omega.to_fit=="y" else "n"
     pri = "p" if (ecc.prior_width_lo!=0. or omega.prior_width_lo!=0.) else "n"
-    sesinw_in=[to_fit,sesinw,sesinw_step,pri,sesinw_prior_mean,sesinw_prior_width,sesinw_prior_width,sesinw_bounds_lo,sesinw_bounds_hi]
-    secosw_in=[to_fit,secosw,secosw_step,pri,secosw_prior_mean,secosw_prior_width,secosw_prior_width,secosw_bounds_lo,secosw_bounds_hi]
+    # sesinw_in=[to_fit,sesinw,sesinw_step,pri,sesinw_prior_mean,sesinw_prior_width,sesinw_prior_width,sesinw_bounds_lo,sesinw_bounds_hi]
+    # secosw_in=[to_fit,secosw,secosw_step,pri,secosw_prior_mean,secosw_prior_width,secosw_prior_width,secosw_bounds_lo,secosw_bounds_hi]
 
     from ._classes import _param_obj
-    sesinw_in = _param_obj(*sesinw_in)
-    secosw_in = _param_obj(*secosw_in)
+    sesinw_tup = sesinw if to_fit=="n" else (sesinw, sesinw_prior_width) if sesinw_prior_width>0 else (sesinw_bounds_lo, sesinw,sesinw_bounds_hi)
+    secosw_tup = secosw if to_fit=="n" else (secosw, secosw_prior_width) if secosw_prior_width>0 else (secosw_bounds_lo, secosw,secosw_bounds_hi)
 
     if return_tuple:
-        sesinw = sesinw_in.start_value if sesinw_in.to_fit=="n" else (sesinw_in.start_value, sesinw_prior_width) if sesinw_prior_width>0 else (sesinw_in.bounds_lo, sesinw_in.start_value,sesinw_in.bounds_hi)
-        secosw = secosw_in.start_value if secosw_in.to_fit=="n" else (secosw_in.start_value, secosw_prior_width) if secosw_prior_width>0 else (secosw_in.bounds_lo, secosw_in.start_value,secosw_in.bounds_hi)
-        return sesinw, secosw
-
+        return sesinw_tup, secosw_tup
+    
+    sesinw_in = _param_obj.from_tuple(sesinw_tup)
+    secosw_in = _param_obj.from_tuple(secosw_tup)
     return sesinw_in, secosw_in
 
 
@@ -1545,3 +1569,26 @@ def jitter_estimate(f,e):
     Estimate the jitter of a light curve
     """
     return np.sqrt(rms_estimate_LC(f)**2 - np.mean(e)**2)
+
+
+
+def decontaminate(F,contam_frac):
+    """
+    decontaminate flux F following prescription by eq. 8 of kipping & Tinetti https://doi.org/10.1111/j.1365-2966.2010.17094.x
+    
+    Equivalently written as: Fcorr = F*(1+Fcont/F_st)- Fcont/F_st
+    
+    Parameters
+    -----------
+    F: array-like;
+        observed contaminated flux that needs correction
+    contam_frac: float;
+        fraction of contamination/target flux in aperture i.e. Fcontam/Ftarget
+
+    Returns:
+    --------
+    F_corr: array-like;
+        decontaminated flux
+    """
+    target_frac =  1-contam_frac
+    return F*(1+contam_frac/target_frac) - contam_frac/target_frac

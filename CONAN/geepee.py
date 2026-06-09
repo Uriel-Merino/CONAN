@@ -4,19 +4,19 @@ import george, celerite, spleaf
 import spleaf.term as term
 from types import SimpleNamespace as SN
 
-gp_h3h4names = SN(  h3 = {"sho":"Q", "exps2":"η", "rquad":"α",  "qp":"η",  "qp_mp":"η", "qp_sc":"b", "qp_ce":"C", "qpc":"w"},
-                    h4 = {"qp":"P",  "qp_sc":"P",  "qp_ce":"P",  "qp_mp":"P", "qpc":"P"})
+gp_h3h4names = SN(  h3 = {"sho":"Q", "exps2":"η", "rquad":"α",  "qp":"η",  "qp_mp":"η", "qp_sc":"b", "qp_ce":"C","qpc":"amp2"},
+                    h4 = {"qp":"P",  "qp_sc":"P",  "qp_ce":"P",  "qp_mp":"P","qpc":"P"})
 
-gp_h5names = SN(h5={"qpc":"amplitude2"})
+#to introduce new GP kernel into CONAN
+# - simply add the kernel to the dictionary of possible kernels below.
+#   with a shortcut name for calling the kernel in the code.
+#   the kernel should be callable directly from the gp package, or if not, define a class/function for the kernel
+# - add the conversion function to the gp_params_convert class
+#   the conversion function should take in the data type (lc or rv), amplitude, lengthscale, h3 and h4
+#   and return the parameters in the order required by the kernel's set_param function
 
 
-#to introduce new GP kernel into CONAN, simply add the kernel to the dictionary of possible kernels below.
-# with a shortcut name for calling the kernel in the code.
-# the kernel should be callable directly from the package, or if not, define a class/function for the kernel
-# then, add the conversion function to the gp_params_convert class
-# the conversion function should take in the data type (lc or rv), amplitude, lengthscale, h3 and h4
-# and return the parameters in the order required by the kernel's set_param function
-
+# new celerite kernels
 class celerite_QPTerm(terms.Term):
     # This is a celerite term that implements an approximate quasiperiodic kernel
     # eqn 56 of the celerite paper https://arxiv.org/pdf/1703.09710
@@ -58,7 +58,8 @@ class celerite_cosine(terms.Term):
             0.0, np.exp(log_nu),
         )
     
-    
+
+# spleaf kernel translations    
 def translate_param_cos(a,nu):
     return dict(a=a,b=0,la=0,nu=nu)
 def spleaf_cosine(a, nu):
@@ -110,7 +111,7 @@ george_kernels = dict(  mat32 = george.kernels.Matern32Kernel,
                         rquad = george.kernels.RationalQuadraticKernel,
                         cte   = george.kernels.ConstantKernel,
                         cte2   = george.kernels.ConstantKernel,
-                        qpc   = (george.kernels.ExpSquaredKernel,george.kernels.ExpSine2Kernel,george.kernels.CosineKernel,george.kernels.ConstantKernel,george.kernels.ConstantKernel) ) # eq 19 (https://arxiv.org/pdf/2012.01862)
+                        qpc   = (george.kernels.ExpSquaredKernel,george.kernels.ExpSine2Kernel,george.kernels.CosineKernel,george.kernels.ConstantKernel,george.kernels.ConstantKernel) ) # eq 19 (https://arxiv.org/pdf/2012.01862))
 
 celerite_kernels = dict(mat32 = celerite.terms.Matern32Term,
                         exp   = celerite.terms.RealTerm,
@@ -130,12 +131,12 @@ spleaf_kernels = dict(  mat32  = term.Matern32Kernel,
                         qp_mp  = term.MEPKernel)
 
 npars_gp = dict(mat32 = 2, mat52 = 2, exp = 2, cos = 2, expsq = 2, exps2 = 3, sho = 3,
-                rquad = 3, qp    = 4, qp_sc = 4, qp_mp = 4, qp_ce = 4, qpc = 5, cte = 1 )
+                rquad = 3, qp    = 4, qpc    = 6,qp_sc = 4, qp_mp = 4, qp_ce = 4 ,cte = 1,cte2 = 1)
 
 
 class gp_params_convert:
     """
-    object to convert gp amplitude and lengthscale to required value for different kernels
+    object to convert gp parameters to required values for different kernels
     """
     def __init__(self):
         self._allowed_kernels = dict(   ge_ = [f"ge_{k}" for k in george_kernels.keys()],
@@ -143,7 +144,7 @@ class gp_params_convert:
                                         sp_ = [f"sp_{k}" for k in spleaf_kernels.keys()]
                                     )
         
-    def get_values(self, kernels, data, pars):
+    def get_values(self, kernels, data, pars, gp_dim=1):
         """
         transform pars into required values for given kernels.
         
@@ -166,29 +167,34 @@ class gp_params_convert:
         assert data in ["lc","rv"],f'data can only be one of ["lc","rv"]'
         if isinstance(kernels, str): kernels= [kernels]
             
-        conv_pars = []
+        conv_pars     = []
+        alphas, betas = [], []
         for i,kern in enumerate(kernels):
             assert kern[:3] in ["ge_","ce_","sp_"], f'gp_params_convert(): kernel must start with "ge_","ce_" or "sp_" but "{kern}" given'
             assert kern in self._allowed_kernels[kern[:3]], f'gp_params_convert(): `{kern[:2]}` kernel to convert must be one of {self._allowed_kernels[kern[:3]]} but "{kern}" given'
 
             # call class function with the name kern
-            p = self.__getattribute__(kern)(data,*pars[i*5:i*5+5])
-            conv_pars.append(p)
-            
-        return np.concatenate(conv_pars)
-            
-        
-    def any_george(self, data, amplitude,lengthscale):
-        """
-        simple conversion where amplitude corresponds to the standard deviation of the process
-        """        
-        if amplitude==-1: amplitude = 1
-        else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
-        
+            if kern[:3]=="sp_" and gp_dim>1:
+                if i == 0:
+                    p,alpha,beta = self.__getattribute__(kern)(data,*pars[i*5:i*5+5])
+                    conv_pars.extend([1]+p)
+                    alphas.append(alpha)
+                    betas.append(beta)
+                else:
+                    alpha = pars[i*5]*1e-6 if data=="lc" else pars[i*5]
+                    beta  = pars[i*5+4]*1e-6 if data=="lc" else pars[i*5+4]
+                    alphas.append(alpha)
+                    betas.append(beta)
+            else:
+                npars = 4 if data=='lc' else 5
+                p = self.__getattribute__(kern)(data,*pars[i*npars:i*npars+npars])
+                conv_pars.append(p)
 
-        log_var    = np.log(amplitude**2)
-        log_metric = np.log(lengthscale)
-        return log_var, log_metric
+        if kern[:3]=="sp_" and gp_dim>1:
+            return np.array(conv_pars+alphas+betas)
+        else:    
+            return np.concatenate(conv_pars)
+            
     
     #======spleaf kernels=======
     # the kernels here are a direct function of the distance between points
@@ -201,7 +207,12 @@ class gp_params_convert:
 
         sig        = amplitude
         rho        = lengthscale
-        return sig, rho
+
+        if h5==None or np.isnan(h5): 
+            return sig, rho
+        else:
+            h5 = h5*1e-6 if data == "lc" else h5
+            return [rho], sig, h5
     
     def sp_exp(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
@@ -212,7 +223,12 @@ class gp_params_convert:
     
         a          = amplitude**2  #variance
         la         = 1/lengthscale
-        return a, la
+        
+        if h5==None or np.isnan(h5): 
+            return a, la
+        else:
+            h5 = h5*1e-6 if data == "lc" else h5
+            return [la], a, h5
     
     def sp_sho(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
         """
@@ -223,8 +239,13 @@ class gp_params_convert:
         sig        = amplitude
         P0         = lengthscale
         Q          = h3
-        return sig, P0, Q
-    
+        
+        if h5==None or np.isnan(h5): 
+            return sig, P0, Q
+        else:
+            h5 = h5*1e-6 if data == "lc" else h5
+            return [P0, Q], sig, h5
+
     def sp_mat32(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         Matern32 kernel
@@ -234,7 +255,12 @@ class gp_params_convert:
         
         sig        = amplitude
         rho        = lengthscale
-        return sig, rho
+
+        if h5==None or np.isnan(h5): 
+            return sig, rho
+        else:
+            h5 = h5*1e-6 if data == "lc" else h5
+            return [rho], sig, h5
     
     def sp_mat52(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
@@ -245,8 +271,13 @@ class gp_params_convert:
                 
         sig        = amplitude
         rho        = lengthscale
-        return sig, rho
-    
+
+        if h5==None or np.isnan(h5): 
+            return sig, rho
+        else:
+            h5 = h5*1e-6 if data == "lc" else h5
+            return [rho], sig, h5
+            
     def sp_cos(self, data, amplitude, lengthscale, h3=None, h4=None, h5=None):
         """
         Cosine kernel built from spleaf QuasiperiodicKernel, with b and la set to 0
@@ -256,7 +287,12 @@ class gp_params_convert:
                 
         variance   = amplitude**2
         nu         = 2*np.pi/lengthscale
-        return variance, nu  
+
+        if h5==None or np.isnan(h5):
+            return variance, nu  
+        else:
+            h5 = h5*1e-6 if data == "lc" else h5
+            return [nu], variance, h5
         
     def sp_exps2(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
         """
@@ -268,7 +304,12 @@ class gp_params_convert:
         sig        = amplitude
         P          = lengthscale
         eta        = h3
-        return sig, P, eta
+
+        if h5==None or np.isnan(h5):
+            return sig, P, eta
+        else:
+            h5 = h5*1e-6 if data == "lc" else h5
+            return [P, eta], sig, h5
     
     def sp_qp(self, data, amplitude, lengthscale, h3, h4, h5=None):
         """
@@ -276,12 +317,18 @@ class gp_params_convert:
         """
         if amplitude==-1: amplitude = 1
         else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
-                
+
         sig        = amplitude
         rho        = lengthscale
         eta        = h3
         P          = h4
-        return sig, rho, eta, P
+
+        if h5==None or np.isnan(h5):      
+            return sig, rho, eta, P
+        else:
+            h5     = h5*1e-6 if data == "lc" else h5
+            return  [rho, eta, P], sig, h5
+
     
     def sp_qp_mp(self, data, amplitude, lengthscale, h3, h4, h5=None):
         """
@@ -294,7 +341,12 @@ class gp_params_convert:
         rho        = lengthscale
         eta        = h3
         P          = h4
-        return sig, rho, eta, P
+
+        if h5==None or np.isnan(h5):  
+            return sig, rho, eta, P
+        else:
+            h5     = h5*1e-6 if data == "lc" else h5
+            return [rho, eta, P], sig, h5
     
     def sp_qp_sc(self, data, amplitude, lengthscale, h3, h4, h5=None):  
         """
@@ -311,7 +363,12 @@ class gp_params_convert:
         la  = 1/lengthscale
         b   = amplitude2**2
         nu  = 2*np.pi/h4
-        return a, la, b, nu
+
+        if h5==None or np.isnan(h5):
+            return a, la, b, nu
+        else:
+            h5     = h5*1e-6 if data == "lc" else h5
+            return [la,b,nu], a, h5
     
     #=======celerite kernels =======
     # the kernels here are directly a function of the distance between points, 
@@ -435,7 +492,7 @@ class gp_params_convert:
         else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
         
         log_var    = np.log(amplitude**2)
-        metric     = (lengthscale)**2
+        metric     = lengthscale**2
         log_metric = np.log(metric)
         return log_var, log_metric
     
@@ -475,6 +532,20 @@ class gp_params_convert:
 
         return log_var, log_metric, log_var2, gamma, log_period
 
+
+    def ge_rquad(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
+        """
+        George rationalquadratic, stationary kernel
+        """
+        if amplitude==-1: amplitude = 1
+        else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
+        
+        log_var    = np.log(amplitude**2)
+        log_alpha  = np.log(h3)
+        metric     = lengthscale**2
+        log_metric = np.log(metric)
+        return log_var, log_alpha, log_metric
+
     def ge_cte(self, data, amplitude, lengthscale=None, h3=None, h4=None, h5=None):
         """
         George cte.
@@ -495,7 +566,7 @@ class gp_params_convert:
 
         return log_var
 
-    def ge_qpc(self, data, amplitude,lengthscale, h3, h4, h5):
+    def ge_qpc(self, data, amplitude,lengthscale, h3, h4, h5=None):
         """
         George quasiperiodic and cosine. ge_qpc = ge_expsq *  (h1**2*ge_exps2 + h2**2*ge_cos)
 
@@ -506,30 +577,132 @@ class gp_params_convert:
         - h1, h2 = amplitude, amplitude2
         - w = eta_qp
         """
-        w, P = h3, h4 
-        amplitude2 = h5
+        amplitude2, P = h3, h4 
+        w_fixed=0.31 #fixed value of eta_qp for the qp component, to avoid overfitting. this is a value that works well for most stars, but can be changed if needed.
         logvarh1                    = self.ge_cte(data,amplitude)
         logvarh2                    = self.ge_cte2(data,amplitude2)
-        log_var, log_metric         = self.ge_expsq(data, -1, lengthscale)
-        log_var2, gamma, log_period = self.ge_exps2(data, -1, P, w)
-        log_varcos, log_periodcos = self.ge_cos(data,-1,P/2)
+        log_var, log_metric         = self.ge_expsq(data, -1, lengthscale/2.0)
+        log_var2, gamma, log_period = self.ge_exps2(data, -1, P, w_fixed)
+        log_varcos, log_periodcos = self.ge_cos(data,-1,P/2.0)
 
         return log_metric, logvarh1,gamma,log_period,logvarh2, log_periodcos
 
 
-
-    def ge_rquad(self, data, amplitude, lengthscale, h3, h4=None, h5=None):
-        """
-        George rationalquadratic, stationary kernel
-        """
-        if amplitude==-1: amplitude = 1
-        else: amplitude  = amplitude*1e-6 if data == "lc" else amplitude
-        
-        log_var    = np.log(amplitude**2)
-        log_alpha  = np.log(h3)
-        metric     = lengthscale**2
-        log_metric = np.log(metric)
-        return log_var, log_alpha, log_metric
-
+    
     def __repr__(self):
         return 'object to convert gp amplitude and lengthscale to required value for different kernels'
+        
+
+class GPSaveObj:
+    """
+    object to save the state of a GP kernel for post-fit manipulation.
+    """
+    def __init__(self, fname,gp_pck, gp, x, gp_pars, ndim_gp, gp_cols, gp_cols_err, residuals, kernel=None):
+        """
+        Parameters
+        ----------
+        fname: str, optional
+            The filename where the GP object is saved.
+        gp_pck: str, optional
+            The package used for the GP, e.g., 'ge' for George, 'ce' for celerite, 'sp' for spleaf.
+        gp: object, optional
+            The GP object itself
+        x: array-like, optional
+            The x values at which the GP is evaluated.
+        gp_pars: dict
+            The parameters of the GP, such as amplitude, lengthscale, h3, h4, h5
+        ndim_gp: int, optional
+            The number of dimensions of the GP.
+        gp_cols: list, optional
+            The columns of the GP data.
+        gp_cols_err: list, optional
+            The columns of the GP data errors.
+        residuals: array-like, optional
+            The residuals to which the GP is fit.
+        kernel: str, optional
+            The kernel used for the GP.
+        """
+
+        self.fname          = fname
+        self.gp             = gp
+        self.gp_pck         = gp_pck
+        self.x              = x
+        self.ndim_gp        = ndim_gp
+        self.resid          = residuals
+        self.kernel         = kernel
+        self.gp_cols        = gp_cols
+        self.gp_cols_err    = gp_cols_err
+        self.gp_pars        = gp_pars
+
+
+    def get_param_dict(self, original=False):
+        """
+        Get the GP parameters as a dictionary.
+
+        Parameters
+        ----------
+        original: bool, optional
+            If True, return the original package values. If False, return the converted values.
+
+        Returns
+        -------
+        dict
+            A dictionary of the GP parameters.
+        """
+        if original:
+            if self.gp_pck in ['ge','ce']:
+                return dict(self.gp.get_parameter_dict())
+            else:
+                return {k:v for k,v in zip(self.gp.param, self.gp.get_param())}
+        else:
+            return self.gp_pars
+
+    def predict(self, x=None,return_var=False, series_id=0):
+        """
+        Predict the GP at the given x values.
+
+        Parameters
+        ----------
+        x: array-like, optional
+            The x values at which to predict the GP. If None, use the saved x values.
+        return_var: bool, optional
+            If True, return the variance of the GP prediction.
+        series_id: int, optional
+            For multiseries GP fit with Spleaf, the series ID (dimension) for the GP prediction. Default is 0.
+
+        Returns
+        -------
+        array-like
+            The GP prediction at the given x values.
+        If return_var is True, returns a tuple of (mean, variance).
+        If return_var is False, returns only the mean.
+        """
+
+        x = self.x if x is None else x
+
+        if self.gp_pck in ['ge','ce']:
+            if self.ndim_gp ==1:
+                srt_x   = np.argsort(x)
+                unsrt_x = np.argsort(srt_x)
+                if return_var:
+                    pred, var = self.gp.predict(self.resid, t=x[srt_x], return_var=True)
+                    return pred[unsrt_x], var[unsrt_x]
+                else:
+                    pred = self.gp.predict(self.resid, t=x[srt_x], return_var=False)
+                    return pred[unsrt_x]
+
+        elif self.gp_pck == 'sp':
+            if self.ndim_gp == 1:
+                srt_x   = np.argsort(x)
+                unsrt_x = np.argsort(srt_x)  #indices to unsort the gp axis
+                return self.gp.conditional(self.resid, x[srt_x], calc_cov=return_var)[unsrt_x]
+            else:
+                self.gp.kernel["GP"].set_conditional_coef(series_id=series_id)
+                calc_cov = "diag" if return_var else False
+                return self.gp.conditional(self.resid, x, calc_cov=calc_cov)
+
+    def __repr__(self):
+        return f"GPSaveObj({self.fname}: kernel={self.kernel}, ndim={self.ndim_gp}, cols={self.gp_cols}, cols_err={self.gp_cols_err})"
+
+    def __str__(self):
+        return self.__repr__()

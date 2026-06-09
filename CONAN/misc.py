@@ -93,10 +93,7 @@ def _print_output(self, section: str, file=None):
 
         for k,v in DA.items():
             if v.trig is not None:
-                amp_pri = f"F({v.Amp.user_input})" if isinstance(v.Amp.user_input, (float,int)) else f"N({v.Amp.user_input[0]},{v.Amp.user_input[1]})" if len(v.Amp.user_input)==2 else f"U({v.Amp.user_input[0]},{v.Amp.user_input[1]},{v.Amp.user_input[2]})"
-                P_pri   = "None" if v.P.user_input==None else f"F({v.P.user_input})" if isinstance(v.P.user_input, (float,int)) else f"N({v.P.user_input[0]},{v.P.user_input[1]})" if len(v.P.user_input)==2 else f"U({v.P.user_input[0]},{v.P.user_input[1]},{v.P.user_input[2]})"
-                x0_pri  = "None" if v.x0.user_input==None else f"F({v.x0.user_input})" if isinstance(v.x0.user_input, (float,int)) else f"N({v.x0.user_input[0]},{v.x0.user_input[1]})" if len(v.x0.user_input)==2 else f"U({v.x0.user_input[0]},{v.x0.user_input[1]},{v.x0.user_input[2]})"
-                t = txtfmt.format(v.name, v.trig, v.n, v.par, amp_pri, P_pri, x0_pri)
+                t = txtfmt.format(v.name, v.trig, v.n, v.par, v.Amp.prior_str,v.P.prior_str, v.x0.prior_str)
                 _print_sinusoid += t
         print(_print_sinusoid, file=file)
 
@@ -105,31 +102,27 @@ def _print_output(self, section: str, file=None):
         DA = self._GP_dict
         max_namefilt_len = max([len(n) for n in self._names+self._filters]+[9])      #max length of lcname/filtname
         _print_gp = f"""# ============ Photometry GP properties (start newline with name of * or + to Xply or add a 2nd gp to last file) ========="""
-        _print_gp += f"""\n{spacing}{"name/filt":{max_namefilt_len}s} {"kern":5s} {'par':6s} {'h1:[Amp_ppm]':18s} {'h2:[len_scale1]':18s} {'h3:[Q,η,α,b]':18s} {'h4:[P]':12s} {'h5:[amp2]':12s} """
+        _print_gp += f"""\n{spacing}{"name/filt":{max_namefilt_len}s} {"kern":5s} {'par':6s} {'h1:[Amp]':18s} {'h2:[len_scale1]':18s} {'h3:[Q,η,C,α,b]':18s} {'h4:[P]':12s} """
         if DA != {}: 
             if self._sameLCgp.filtflag:
                 for f in self._sameLCgp.filters:
                     lc = self._sameLCgp.LCs[f][0]
 
                     ngp = DA[lc]["ngp"]
-                    if ngp == 2:
-                        txtfmt = f"\n{spacing}{{0:{max_namefilt_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s} {7:12s}" + f"\n{spacing}{{8:{max_namefilt_len}s}}"+" {9:5s} {10:6s} {11:18s} {12:18s} {13:18s} {14:12s} {15:12s}"        
-                        t = txtfmt.format(f,
-                                            DA[lc]["amplitude0"].user_data.kernel, DA[lc]["amplitude0"].user_data.col,
-                                            DA[lc]["amplitude0"].prior_str, DA[lc]["lengthscale0"].prior_str,  
-                                            DA[lc]["h30"].prior_str, DA[lc]["h40"].prior_str,DA[lc]["h50"].prior_str, 
-                                            " "*(max_namefilt_len-3)+f'|{DA[lc]["op"]}|', 
-                                            DA[lc]["amplitude1"].user_data.kernel, DA[lc]["amplitude1"].user_data.col,
-                                            DA[lc]["amplitude1"].prior_str, DA[lc]["lengthscale1"].prior_str,
-                                            DA[lc]["h31"].prior_str, DA[lc]["h41"].prior_str,DA[lc]["h51"].prior_str)
-                    else:
-                        txtfmt = f"\n{spacing}{{0:{max_namefilt_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s} {7:12s}"
-                        t = txtfmt.format(f,
-                                            DA[lc]["amplitude0"].user_data.kernel, DA[lc]["amplitude0"].user_data.col,  
-                                            DA[lc]["amplitude0"].prior_str, DA[lc]["lengthscale0"].prior_str,
-                                            DA[lc]["h30"].prior_str, DA[lc]["h40"].prior_str,DA[lc]["h50"].prior_str)
+                    txtfmt = f"\n{spacing}{{0:{max_namefilt_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s}"
+                    val    = [f,
+                            DA[lc]["amplitude0"].user_data.kernel, DA[lc]["amplitude0"].user_data.col,  
+                            DA[lc]["amplitude0"].prior_str, DA[lc]["lengthscale0"].prior_str,
+                            DA[lc]["h30"].prior_str, DA[lc]["h40"].prior_str]
+                    for n in range(1,ngp):
+                        txtfmt += f"\n{spacing}{{{n*7+0}:{max_namefilt_len}s}}"+f" {{{n*7+1}:5s}} {{{n*7+2}:6s}} {{{n*7+3}:18s}} {{{n*7+4}:18s}} {{{n*7+5}:18s}} {{{n*7+6}:12s}}"
+                        val.extend([" "*(max_namefilt_len-3)+f'|{DA[lc]["op"][n-1]}|', 
+                                        DA[lc][f"amplitude{n}"].user_data.kernel, DA[lc][f"amplitude{n}"].user_data.col,
+                                        DA[lc][f"amplitude{n}"].prior_str, DA[lc][f"lengthscale{n}"].prior_str,
+                                        DA[lc][f"h3{n}"].prior_str, DA[lc][f"h4{n}"].prior_str] )
+                    
+                    t = txtfmt.format(*val)
                     _print_gp += t
-
             else:
                 if self._allLCgp:  #shortcut print just one line gp config if all LCs have the same GP
                     equal_allgp = all([_compare_nested_structures(DA[list(DA.keys())[0]],DA[lc]) for lc in list(DA.keys())[1:]])
@@ -137,23 +130,20 @@ def _print_output(self, section: str, file=None):
                     equal_allgp = False
                 for lc in DA.keys():
                     ngp = DA[lc]["ngp"]
-                    if ngp == 2:
-                        txtfmt = f"\n{spacing}{{0:{max_namefilt_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s} {7:12s}" + f"\n{spacing}{{8:{max_namefilt_len}s}}"+" {9:5s} {10:6s} {11:18s} {12:18s} {13:18s} {14:12s} {15:12s}"        
-                        t = txtfmt.format('same' if self._sameLCgp.flag else "all" if equal_allgp else lc,
-                                            DA[lc]["amplitude0"].user_data.kernel, DA[lc]["amplitude0"].user_data.col,  
-                                            DA[lc]["amplitude0"].prior_str, DA[lc]["lengthscale0"].prior_str, 
-                                            DA[lc]["h30"].prior_str, DA[lc]["h40"].prior_str, DA[lc]["h50"].prior_str,
-                                            " "*(max_namefilt_len-3)+f'|{DA[lc]["op"]}|',   
-                                            DA[lc]["amplitude1"].user_data.kernel, DA[lc]["amplitude1"].user_data.col,
-                                            DA[lc]["amplitude1"].prior_str, DA[lc]["lengthscale1"].prior_str,
-                                            DA[lc]["h31"].prior_str, DA[lc]["h41"].prior_str,DA[lc]["h51"].prior_str)
-                    else:
-                        txtfmt = f"\n{spacing}{{0:{max_namefilt_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s} {7:12s}"
-                        t = txtfmt.format('same' if self._sameLCgp.flag else "all" if equal_allgp else lc,
-                                            DA[lc]["amplitude0"].user_data.kernel, DA[lc]["amplitude0"].user_data.col,  
-                                            DA[lc]["amplitude0"].prior_str, DA[lc]["lengthscale0"].prior_str,
-                                            DA[lc]["h30"].prior_str, DA[lc]["h40"].prior_str, DA[lc]["h50"].prior_str
-                                            )
+
+                    txtfmt = f"\n{spacing}{{0:{max_namefilt_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s}"
+                    val    = ['same' if self._sameLCgp.flag else "all" if equal_allgp else lc,
+                                DA[lc]["amplitude0"].user_data.kernel, DA[lc]["amplitude0"].user_data.col,  
+                                DA[lc]["amplitude0"].prior_str, DA[lc]["lengthscale0"].prior_str,
+                                DA[lc]["h30"].prior_str, DA[lc]["h40"].prior_str
+                            ]
+                    for n in range(1,ngp):
+                        txtfmt += f"\n{spacing}{{{n*7+0}:{max_namefilt_len}s}}"+f" {{{n*7+1}:5s}} {{{n*7+2}:6s}} {{{n*7+3}:18s}} {{{n*7+4}:18s}} {{{n*7+5}:18s}} {{{n*7+6}:12s}}"
+                        val.extend([" "*(max_namefilt_len-3)+f'|{DA[lc]["op"][n-1]}|', 
+                                        DA[lc][f"amplitude{n}"].user_data.kernel, DA[lc][f"amplitude{n}"].user_data.col,
+                                        DA[lc][f"amplitude{n}"].prior_str, DA[lc][f"lengthscale{n}"].prior_str,
+                                        DA[lc][f"h3{n}"].prior_str, DA[lc][f"h4{n}"].prior_str] )
+                    t = txtfmt.format(*val)
                     _print_gp += t
                     if self._sameLCgp.flag or equal_allgp:      #dont print the other lc GPs if same_GP is True
                         break
@@ -198,7 +188,7 @@ def _print_output(self, section: str, file=None):
         #define print out format
         txtfmt = f"\n{spacing}{{0:16s}}: {{1:40s}}\t{{2}}"
         _print_custom_function += txtfmt.format("function", DA.func.__name__ if flag else 'None', "#custom function/class to combine with/replace LCmodel")
-        _print_custom_function += txtfmt.format("x",DA.x if flag else 'None',"#independent variable [time, phase_angle]")
+        _print_custom_function += txtfmt.format("x",DA.x if flag else 'None',"#independent variable [time, phase_angle, col3-8]")
         if flag:
             if DA.func_args == {}:   # if custom func does not takein any additional arguments
                 fa_str = 'None'
@@ -227,7 +217,7 @@ def _print_output(self, section: str, file=None):
         #define print out format
         txtfmt = f"\n{spacing}{{0:16s}}: {{1:40s}}\t{{2}}"
         _print_custom_function += txtfmt.format("function", DA.func.__name__ if flag else 'None', "#custom function/class to combine with/replace RVmodel")
-        _print_custom_function += txtfmt.format("x",DA.x if flag else 'None',"#independent variable [time, true_anomaly]")
+        _print_custom_function += txtfmt.format("x",DA.x if flag else 'None',"#independent variable [time, true_anomaly,col3-5]")
         if flag:
             if DA.func_args == {}:   # if custom func does not takein any additional arguments
                 fa_str = 'None'
@@ -345,7 +335,8 @@ def _print_output(self, section: str, file=None):
                         f"""\n{spacing}{'apply_LCjitter(y/n,list)':40s}  {app_jitt} \n{spacing}{'apply_RVjitter(y/n,list)':40s}  {app_RVjitt} """+\
                             f"""\n{spacing}{'LCjitter_loglims(auto/[lo,hi])':40s}  {str(DA['LCjitter_loglims']).replace(" ","")} \n{spacing}{'RVjitter_lims(auto/[lo,hi])':40s}  {str(DA['RVjitter_lims']).replace(" ","")} """+\
                                 f"""\n{spacing}{'LCbasecoeff_lims(auto/[lo,hi])':40s}  {str(DA['LCbasecoeff_lims']).replace(" ","")} \n{spacing}{'RVbasecoeff_lims(auto/[lo,hi])':40s}  {str(DA['RVbasecoeff_lims']).replace(" ","")} """+\
-                                    f"""\n{spacing}{'Light_Travel_Time_correction(y/n)':40s}  {DA['LTT_corr']}""" # \n{spacing}{'fit_LCoffset(y/n or list)':40s}  {fit_off}
+                                    f"""\n{spacing}{'Light_Travel_Time_correction(y/n)':40s}  {DA['LTT_corr']} \n{spacing}{'apply_LC_GPndim_jitter(y/n)':40s}  {DA['apply_LC_GPndim_jitter']} \n{spacing}{'apply_RV_GPndim_jitter(y/n)':40s}  {DA['apply_RV_GPndim_jitter']} """ +\
+                                        f"""\n{spacing}{'apply_LC_GPndim_offset(y/n)':40s}  {DA['apply_LC_GPndim_offset']} \n{spacing}{'apply_RV_GPndim_offset(y/n)':40s}  {DA['apply_RV_GPndim_offset']} """
 
         
         print(_print_fit_pars, file=file)
@@ -357,7 +348,6 @@ def _print_output(self, section: str, file=None):
             DA = self._rvdict
             txtfmt = f"\n{spacing}{{0:{max_name_len}s}}"+" {1:6s} {2:7s} |{3:4d} {4:4d} {5:4d} {6:4d}| {7:3d} {8:2s} {9:15s} | {10:14s}"         
             for i in range(self._nRV):
-                # gam_pri_ = f'N({DA["gammas"][i]},{DA["sig_lo"][i]})' if DA["sig_lo"][i] else f'U({DA["bound_lo"][i]},{DA["gammas"][i]},{DA["bound_hi"][i]})' if DA["bound_hi"][i] else f"F({DA['gammas'][i]})"
                 gam_pri_ = prior_str(DA["gamma"][i].user_input)
                 t = txtfmt.format(self._names[i],self._RVunit,self._rescaled_data.config[i], *self._RVbases[i],
                                     self._useGPrv[i],self._rvspline[self._names[i]].conf,gam_pri_)
@@ -367,8 +357,7 @@ def _print_output(self, section: str, file=None):
     if section == "rv_gp":
         DA = self._rvGP_dict
         _print_gp = f"""# ============ RV GP properties (start newline with name of * or + to Xply or add a 2nd gp to last file) ======="""
-        # _print_gp += f"""\nsame_GP: {self._sameRVgp.flag}"""
-        _print_gp += f"""\n{spacing}{"name":{max_name_len}s} {"kern":5s} {'par':6s} {'h1:[Amp_ppm]':18s} {'h2:[len_scale]':18s} {'h3:[Q,η,C,α,b]':18s} {'h4:[P]':12s} {'h5:[amp2]':12s}"""
+        _print_gp += f"""\n{spacing}{"name":{max_name_len}s} {"kern":5s} {'par':6s} {'h1:[Amp_ppm]':18s} {'h2:[len_scale]':18s} {'h3:[Q,η,C,α,b]':18s} {'h4:[P]':12s} | {'h5:[Der_Amp_ppm]':16s} {'ErrCol':6s}"""
         if DA != {}: 
             if self._allRVgp:  #shortcut print just one line gp config if all RVs have the same GP
                 equal_allrvgp = all([_compare_nested_structures(DA[list(DA.keys())[0]],DA[rv]) for rv in list(DA.keys())[1:]])
@@ -377,23 +366,23 @@ def _print_output(self, section: str, file=None):
 
             for rv in DA.keys():
                 ngp = DA[rv]["ngp"]
-                if ngp == 2:
-                    txtfmt = f"\n{spacing}{{0:{max_namefilt_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s} {7:12s}" + f"\n{spacing}{{8:{max_namefilt_len}s}}"+" {9:5s} {10:6s} {11:18s} {12:18s} {13:18s} {14:12s} {15:12s}"        
-                    t = txtfmt.format('same' if self._sameRVgp.flag else "all" if equal_allrvgp else rv,
-                                        DA[rv]["amplitude0"].user_data.kernel, DA[rv]["amplitude0"].user_data.col, 
-                                        DA[rv]["amplitude0"].prior_str,  DA[rv]["lengthscale0"].prior_str,
-                                        DA[rv]["h30"].prior_str, DA[rv]["h40"].prior_str, DA[rv]["h50"].prior_str,
-                                        " "*(max_name_len-3)+f'|{DA[rv]["op"]}|', 
-                                        DA[rv]["amplitude1"].user_data.kernel, DA[rv]["amplitude1"].user_data.col,
-                                        DA[rv]["amplitude1"].prior_str, DA[rv]["lengthscale1"].prior_str,
-                                        DA[rv]["h31"].prior_str, DA[rv]["h41"].prior_str, DA[rv]["h51"].prior_str)
-                else:
-                    txtfmt = f"\n{spacing}{{0:{max_name_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s} {7:12s}"
-                    t = txtfmt.format('same' if self._sameRVgp.flag else "all" if equal_allrvgp else rv,
-                                        DA[rv]["amplitude0"].user_data.kernel, DA[rv]["amplitude0"].user_data.col,  
-                                        DA[rv]["amplitude0"].prior_str,DA[rv]["lengthscale0"].prior_str, 
-                                        DA[rv]["h30"].prior_str, DA[rv]["h40"].prior_str, DA[rv]["h50"].prior_str)
+
+                txtfmt = f"\n{spacing}{{0:{max_name_len}s}}"+" {1:5s} {2:6s} {3:18s} {4:18s} {5:18s} {6:12s} | {7:16s} {8:6s}"
+                val    = ['same' if self._sameRVgp.flag else "all" if equal_allrvgp else rv,
+                                    DA[rv]["amplitude0"].user_data.kernel, DA[rv]["amplitude0"].user_data.col,  
+                                    DA[rv]["amplitude0"].prior_str,DA[rv]["lengthscale0"].prior_str, 
+                                    DA[rv]["h30"].prior_str, DA[rv]["h40"].prior_str, 
+                                    DA[rv]["h50"].prior_str,DA[rv]["amplitude0"].user_data.errcol]
+                for n in range(1,ngp):
+                    txtfmt += f"\n{spacing}{{{n*9+0}:{max_name_len}s}}"+f" {{{n*9+1}:5s}} {{{n*9+2}:6s}} {{{n*9+3}:18s}} {{{n*9+4}:18s}} {{{n*9+5}:18s}} {{{n*9+6}:12s}} | {{{n*9+7}:16s}} {{{n*9+8}:6s}}"
+                    val.extend([" "*(max_name_len-3)+f'|{DA[rv]["op"][n-1]}|', 
+                                    DA[rv][f"amplitude{n}"].user_data.kernel, DA[rv][f"amplitude{n}"].user_data.col,
+                                    DA[rv][f"amplitude{n}"].prior_str, DA[rv][f"lengthscale{n}"].prior_str,
+                                    DA[rv][f"h3{n}"].prior_str, DA[rv][f"h4{n}"].prior_str,
+                                    DA[rv][f"h5{n}"].prior_str, DA[rv][f"amplitude{n}"].user_data.errcol])
+                t = txtfmt.format(*val)
                 _print_gp += t
+
                 if self._sameRVgp.flag or equal_allrvgp:      #dont print the other GPs if same_GP is True or all
                     break
         print(_print_gp, file=file)
@@ -491,28 +480,34 @@ class _param_obj():
         
         v = param_in
         if isinstance(v, (int, float)): #fixed parameter
-            params = ["n",v,0.,"n",v,0.,0.,0.,0.,user_input,user_data,f'F({v})']
+            params = ["n",v,0.,"n",v,0.,0.,0.,0.,v,user_data,f'F({v})']
         elif isinstance(v, tuple):
             if len(v)==2:  #normal prior
                 assert v[1]>0,f"{func_call} wrongly defined normal prior. must be of form (mean,std) with std>0 but {v} given."
                 step   = 0.1*v[1] if step==None else step
                 lo_lim = v[0]-10*v[1] if lo==None else lo
                 hi_lim = v[0]+10*v[1] if hi==None else hi
-                params = ["y",v[0],step,"p",v[0],v[1],v[1],lo_lim,hi_lim,user_input,user_data,f'N({v[0]},{v[1]})']
+                params = ["y",v[0],step,"p",v[0],v[1],v[1],lo_lim,hi_lim,v,user_data,f'N({v[0]},{v[1]})']
             elif len(v)==3: #uniform prior
                 assert v[0]<=v[1]<=v[2],f"{func_call} wrongly defined uniform prior. must be of form (min,start,max) with min<=start<=max but {v} given."
                 step = min(0.001,0.001*np.ptp(v)) if step==None else step
                 lo_lim = v[0] if lo==None else lo
                 hi_lim = v[2] if hi==None else hi
-                params = ["y",v[1],step,"n",v[1],0,0,lo_lim,hi_lim,user_input,user_data,f'U({v[0]},{v[1]},{v[2]})' if prior_str==None else prior_str]
+                params = ["y",v[1],step,"n",v[1],0,0,lo_lim,hi_lim,v,user_data,f'U({v[0]},{v[1]},{v[2]})' if prior_str==None else prior_str]
+            elif len(v)==4 and v[-1]=="LU": #loguniform prior
+                assert v[0]<=v[1]<=v[2],f"{func_call} wrongly defined uniform prior. must be of form (min,start,max) with min<=start<=max but {v} given."
+                step = min(0.001,0.001*np.ptp(v[:-1])) if step==None else step
+                lo_lim = v[0] if lo==None else lo
+                hi_lim = v[2] if hi==None else hi
+                params = ["y",v[1],step,"n",v[1],0,0,lo_lim,hi_lim,v[:-1],user_data,f'LU({v[0]},{v[1]},{v[2]})']
             elif len(v)==4: #truncated normal prior
                 assert v[0]<=v[2]<=v[1] and v[3]>0,f"{func_call} wrongly defined trucated normal prior. must be of form (min,max,mean,std) with min<=mean<=max  and std>0, but {v} given."
                 step = 0.1*v[3] if step==None else step
-                params = ["y",v[2],step,"p",v[2],v[3],v[3],v[0],v[1],user_input,user_data,f'TN({v[0]},{v[1]},{v[2]},{v[3]})']
+                params = ["y",v[2],step,"p",v[2],v[3],v[3],v[0],v[1],v,user_data,f'TN({v[0]},{v[1]},{v[2]},{v[3]})']
             else:
                 raise TypeError(f"{func_call} tuple must have 2,3 or 4 elements but {v} given")
         elif v==None:
-            params = ["n",None,0,"n",None,0,0,0,0,user_input,user_data,'None']
+            params = ["n",None,0,"n",None,0,0,0,0,None,user_data,'None']
         else:
             raise TypeError(f"{func_call} input must be an int, float, tuple or None")
         return cls(*params)
@@ -540,7 +535,7 @@ class _text_format:
 
 
 
-def _compare_nested_structures(obj1, obj2, verbose=False):
+def _compare_nested_structures(obj1, obj2, ignore=[], verbose=False):
     """  
     Compare two nested structures (e.g. dictionaries, lists, etc.) for equality.
     """
@@ -549,8 +544,15 @@ def _compare_nested_structures(obj1, obj2, verbose=False):
         if obj1.keys() != obj2.keys():
             if verbose: print(f"keys differ in {set(obj1) - set(obj2)}")
             return False
-        return all(_compare_nested_structures(obj1[key], obj2[key]) for key in obj1)
-    
+        comp_bool = all(_compare_nested_structures(obj1[key], obj2[key], ignore) for key in obj1 if key not in ignore)
+        if not comp_bool and verbose:
+            for key in obj1:
+                if key not in ignore:
+                    res = _compare_nested_structures(obj1[key], obj2[key], ignore)
+                    if not res:
+                        print(f"{key:25s}: {res}")
+        return comp_bool
+
     elif isinstance(obj1, list) and isinstance(obj2, list):
         if len(obj1) != len(obj2):
             return False
@@ -560,7 +562,7 @@ def _compare_nested_structures(obj1, obj2, verbose=False):
         return np.array_equal(obj1, obj2)
     
     elif isinstance(obj1, SimpleNamespace) and isinstance(obj2, SimpleNamespace):
-        return all([_compare_nested_structures(vars(obj1)[key], vars(obj2)[key]) for key in vars(obj1)])
+        return all([_compare_nested_structures(vars(obj1)[key], vars(obj2)[key]) for key in vars(obj1) if key not in ignore])
     
 
     elif isinstance(obj1, FunctionType) and isinstance(obj2, FunctionType):
@@ -569,22 +571,24 @@ def _compare_nested_structures(obj1, obj2, verbose=False):
                 obj1.__code__.co_names == obj2.__code__.co_names and
                 obj1.__code__.co_varnames == obj2.__code__.co_varnames)
 
-    elif ("CONAN" in str(type(obj1))) and ("CONAN" in str(type(obj1))):
-        return all([_compare_nested_structures(vars(obj1)[key], vars(obj2)[key]) for key in vars(obj1)])
-    
+    elif ("CONAN" in str(type(obj1))) and ("CONAN" in str(type(obj2))):
+        return all([_compare_nested_structures(vars(obj1)[key], vars(obj2)[key]) for key in vars(obj1) if key not in ignore])
+
     else:
         return obj1 == obj2
 
 
-def compare_objs(obj1,obj2):
+def compare_objs(obj1,obj2, ignore=[]):
     """   
     compare two objects for equality
     """
-    res = _compare_nested_structures(obj1,obj2)
+    res = _compare_nested_structures(obj1,obj2,ignore)
     if res:
         return True
     else: 
         for k,v in obj1.__dict__.items():
-            res = _compare_nested_structures(obj1.__dict__[k], obj2.__dict__[k])
-            if not res: print(f"{k:25s}: {res}")
+            if k not in ignore:
+                res = _compare_nested_structures(obj1.__dict__[k], obj2.__dict__[k], ignore)
+                if not res: 
+                    print(f"{k:25s}: {res}")
         return False
